@@ -427,7 +427,7 @@ class DailyTarget(db.Model):
             self.solved_count / self.target_count
         ) * 100
 
-        return round(percentage, 2)
+        return min(round(percentage, 2),100.0)
 
     @property
     def is_completed(self):

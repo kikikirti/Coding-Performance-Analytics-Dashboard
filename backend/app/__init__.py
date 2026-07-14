@@ -97,8 +97,14 @@ def create_app(config_class=Config):
         )
 
     from .auth_routes import auth_bp
+    from .problems_routes import problems_bp
+    from .dashboard_routes import dashboard_bp
+    from .daily_targets_routes import daily_targets_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(problems_bp)
+    app.register_blueprint(daily_targets_bp)
+    app.register_blueprint(dashboard_bp)
 
     @app.get("/")
     def index():
