@@ -1,5 +1,5 @@
 <script setup>
-defineProps({
+const props = defineProps({
   problems: {
     type: Array,
     default: () => [],
@@ -9,11 +9,23 @@ defineProps({
     type: Boolean,
     default: true,
   },
+
+  busyId: {
+    type: [Number, String],
+    default: null,
+  },
+
+  busyAction: {
+    type: String,
+    default: "",
+  },
 });
 
 defineEmits([
   "edit",
   "delete",
+  "mark-solved",
+  "mark-revision",
 ]);
 
 function badgeClass(value) {
@@ -42,6 +54,27 @@ function formatDate(value) {
     new Date(`${value}T00:00:00`),
   );
 }
+
+function isBusy(problemId) {
+  return props.busyId === problemId;
+}
+
+function actionLabel(
+  problemId,
+  action,
+  label,
+) {
+  if (
+    isBusy(problemId) &&
+    props.busyAction === action
+  ) {
+    return action === "delete"
+      ? "Deleting..."
+      : "Updating...";
+  }
+
+  return label;
+}
 </script>
 
 <template>
@@ -49,15 +82,17 @@ function formatDate(value) {
     <table class="data-table problem-table">
       <thead>
         <tr>
-          <th>Problem</th>
+          <th>Title</th>
           <th>Topic</th>
           <th>Difficulty</th>
+          <th>Platform</th>
           <th>Status</th>
           <th>Attempts</th>
-          <th>Time</th>
-          <th>Revision</th>
+          <th>Revision Status</th>
           <th>Solved Date</th>
-          <th v-if="showActions">Actions</th>
+          <th v-if="showActions">
+            Actions
+          </th>
         </tr>
       </thead>
 
@@ -68,7 +103,9 @@ function formatDate(value) {
         >
           <td>
             <div class="problem-title-cell">
-              <strong>{{ problem.title }}</strong>
+              <strong>
+                {{ problem.title }}
+              </strong>
 
               <a
                 v-if="problem.platform_link"
@@ -76,57 +113,81 @@ function formatDate(value) {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {{ problem.platform }}
+                Open problem
               </a>
-
-              <span v-else>
-                {{ problem.platform }}
-              </span>
             </div>
           </td>
 
-          <td>{{ problem.topic }}</td>
+          <td>
+            {{ problem.topic }}
+          </td>
 
           <td>
             <span
               class="badge"
-              :class="badgeClass(problem.difficulty)"
+              :class="badgeClass(
+                problem.difficulty,
+              )"
             >
               {{ problem.difficulty }}
             </span>
           </td>
 
           <td>
+            <a
+              v-if="problem.platform_link"
+              :href="problem.platform_link"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {{ problem.platform }}
+            </a>
+
+            <span v-else>
+              {{ problem.platform }}
+            </span>
+          </td>
+
+          <td>
             <span
               class="badge"
-              :class="badgeClass(problem.status)"
+              :class="badgeClass(
+                problem.status,
+              )"
             >
               {{ problem.status }}
             </span>
           </td>
 
-          <td>{{ problem.attempts }}</td>
-
           <td>
-            {{ problem.time_spent_minutes }} min
+            {{ problem.attempts }}
           </td>
 
           <td>
             <span
               class="badge"
-              :class="badgeClass(problem.revision_status)"
+              :class="badgeClass(
+                problem.revision_status,
+              )"
             >
               {{ problem.revision_status }}
             </span>
           </td>
 
-          <td>{{ formatDate(problem.solved_date) }}</td>
+          <td>
+            {{ formatDate(problem.solved_date) }}
+          </td>
 
           <td v-if="showActions">
-            <div class="table-actions">
+            <div class="table-actions problem-actions">
               <button
                 type="button"
-                class="button button--small button--secondary"
+                class="
+                  button
+                  button--small
+                  button--secondary
+                "
+                :disabled="isBusy(problem.id)"
                 @click="$emit('edit', problem.id)"
               >
                 Edit
@@ -134,10 +195,70 @@ function formatDate(value) {
 
               <button
                 type="button"
-                class="button button--small button--danger-outline"
+                class="
+                  button
+                  button--small
+                  button--success-outline
+                "
+                :disabled="
+                  isBusy(problem.id) ||
+                  problem.status === 'Solved'
+                "
+                @click="
+                  $emit('mark-solved', problem)
+                "
+              >
+                {{
+                  actionLabel(
+                    problem.id,
+                    "Solved",
+                    "Mark as Solved",
+                  )
+                }}
+              </button>
+
+              <button
+                type="button"
+                class="
+                  button
+                  button--small
+                  button--warning-outline
+                "
+                :disabled="
+                  isBusy(problem.id) ||
+                  problem.status ===
+                    'Revision Needed'
+                "
+                @click="
+                  $emit('mark-revision', problem)
+                "
+              >
+                {{
+                  actionLabel(
+                    problem.id,
+                    "Revision Needed",
+                    "Mark as Revision Needed",
+                  )
+                }}
+              </button>
+
+              <button
+                type="button"
+                class="
+                  button
+                  button--small
+                  button--danger-outline
+                "
+                :disabled="isBusy(problem.id)"
                 @click="$emit('delete', problem)"
               >
-                Delete
+                {{
+                  actionLabel(
+                    problem.id,
+                    "delete",
+                    "Delete",
+                  )
+                }}
               </button>
             </div>
           </td>
@@ -148,10 +269,41 @@ function formatDate(value) {
             :colspan="showActions ? 9 : 8"
             class="empty-table-cell"
           >
-            No coding problems match the selected criteria.
+            No coding problems are available.
           </td>
         </tr>
       </tbody>
     </table>
   </div>
 </template>
+
+<style scoped>
+.button--success-outline {
+  color: var(--success);
+  background: transparent;
+  border-color: #9ed5bc;
+}
+
+.button--success-outline:hover:not(:disabled) {
+  color: #ffffff;
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.button--warning-outline {
+  color: var(--warning);
+  background: transparent;
+  border-color: #e5c875;
+}
+
+.button--warning-outline:hover:not(:disabled) {
+  color: #ffffff;
+  background: var(--warning);
+  border-color: var(--warning);
+}
+
+.problem-actions {
+  flex-wrap: wrap;
+  min-width: 420px;
+}
+</style>

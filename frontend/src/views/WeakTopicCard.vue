@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { computed } from "vue";
 
 import ProgressBar from "./ProgressBar.vue";
@@ -154,13 +154,19 @@ function reasonClass(reason) {
     </div>
 
     <ProgressBar
-      :value="topic.solved_percentage"
-      :label="`${topic.solved_count} of ${topic.total_count} problems solved`"
+      :value="
+        topic.solved_percentage
+      "
+      :label="
+        `${topic.solved_count} of ${topic.total_count} problems solved`
+      "
     />
 
     <div class="weak-topic-card__metrics">
       <div>
-        <span>Total Problems</span>
+        <span>
+          Total Problems
+        </span>
 
         <strong>
           {{ topic.total_count }}
@@ -168,7 +174,9 @@ function reasonClass(reason) {
       </div>
 
       <div>
-        <span>Solved Problems</span>
+        <span>
+          Solved Problems
+        </span>
 
         <strong>
           {{ topic.solved_count }}
@@ -176,15 +184,21 @@ function reasonClass(reason) {
       </div>
 
       <div>
-        <span>Revision Needed</span>
+        <span>
+          Revision Needed
+        </span>
 
         <strong>
-          {{ topic.revision_needed_count }}
+          {{
+            topic.revision_needed_count
+          }}
         </strong>
       </div>
 
       <div>
-        <span>Average Attempts</span>
+        <span>
+          Average Attempts
+        </span>
 
         <strong>
           {{ topic.average_attempts }}
@@ -206,13 +220,6 @@ function reasonClass(reason) {
         >
           {{ reason }}
         </span>
-
-        <span
-          v-if="weaknessReasons.length === 0"
-          class="reason-badge"
-        >
-          Additional practice is recommended
-        </span>
       </div>
     </section>
 
@@ -226,9 +233,16 @@ function reasonClass(reason) {
         Rule-based Recommendation
       </h4>
 
-      <ul v-if="recommendations.length > 0">
+      <ul
+        v-if="
+          recommendations.length > 0
+        "
+      >
         <li
-          v-for="recommendation in recommendations"
+          v-for="
+            recommendation in
+            recommendations
+          "
           :key="recommendation"
         >
           {{ recommendation }}
@@ -249,7 +263,12 @@ function reasonClass(reason) {
         button--secondary
         button--full
       "
-      @click="$emit('view-problems', topic.topic)"
+      @click="
+        $emit(
+          'view-problems',
+          topic.topic,
+        )
+      "
     >
       View {{ topic.topic }} Problems
     </button>
@@ -278,7 +297,9 @@ function reasonClass(reason) {
 
 .weak-topic-card__score span {
   margin-top: 2px;
+
   color: var(--text-muted);
+
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -286,7 +307,9 @@ function reasonClass(reason) {
 
 .weak-topic-card__section {
   padding-top: 16px;
-  border-top: 1px solid var(--border);
+
+  border-top:
+    1px solid var(--border);
 }
 
 .weak-topic-card__section h4 {
@@ -303,11 +326,12 @@ function reasonClass(reason) {
 .reason-badge {
   display: inline-flex;
   align-items: center;
+
   min-height: 28px;
   padding: 6px 9px;
-  color: var(--text-secondary);
-  background: var(--surface-muted);
+
   border-radius: 999px;
+
   font-size: 0.72rem;
   font-weight: 750;
   line-height: 1.25;
@@ -330,10 +354,17 @@ function reasonClass(reason) {
 
 .recommendation-box {
   flex: 1;
+
   padding: 15px;
-  background: var(--primary-soft);
-  border: 1px solid #d8e0ff;
-  border-radius: var(--radius-small);
+
+  background:
+    var(--primary-soft);
+
+  border:
+    1px solid #d8e0ff;
+
+  border-radius:
+    var(--radius-small);
 }
 
 .recommendation-box h4 {
@@ -343,7 +374,9 @@ function reasonClass(reason) {
 .recommendation-box ul {
   margin: 0;
   padding-left: 19px;
+
   color: var(--text-secondary);
+
   font-size: 0.82rem;
 }
 
@@ -358,7 +391,9 @@ function reasonClass(reason) {
 
 .recommendation-box p {
   margin: 0;
+
   color: var(--text-secondary);
+
   font-size: 0.82rem;
   line-height: 1.5;
 }

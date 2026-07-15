@@ -17,11 +17,27 @@ import api from "../api/axios";
 const route = useRoute();
 const router = useRouter();
 
-const isEditing = computed(() => {
-  return Boolean(route.params.id);
+const isEditing = computed(() =>
+  Boolean(route.params.id),
+);
+
+const pageTitle = computed(() =>
+  isEditing.value
+    ? "Edit Coding Problem"
+    : "Add Coding Problem",
+);
+
+const submitLabel = computed(() => {
+  if (saving.value) {
+    return "Saving...";
+  }
+
+  return isEditing.value
+    ? "Update Problem"
+    : "Create Problem";
 });
 
-const loading = ref(false);
+const saving = ref(false);
 const loadingProblem = ref(false);
 const errorMessage = ref("");
 const fieldErrors = ref({});
@@ -36,8 +52,8 @@ const form = reactive({
   attempts: 0,
   time_spent_minutes: 0,
   revision_status: "Not Started",
-  notes: "",
   solved_date: "",
+  notes: "",
 });
 
 const platforms = [
@@ -87,6 +103,149 @@ const revisionStatuses = [
   "Mastered",
 ];
 
+function firstError(fieldName) {
+  const error = fieldErrors.value[fieldName];
+
+  if (Array.isArray(error)) {
+    return error[0] || "";
+  }
+
+  return typeof error === "string"
+    ? error
+    : "";
+}
+
+function hasError(fieldName) {
+  return Boolean(firstError(fieldName));
+}
+
+function clearFieldError(fieldName) {
+  if (!fieldErrors.value[fieldName]) {
+    return;
+  }
+
+  const updatedErrors = {
+    ...fieldErrors.value,
+  };
+
+  delete updatedErrors[fieldName];
+  fieldErrors.value = updatedErrors;
+}
+
+function normalizeApiErrors(errors) {
+  if (!errors || typeof errors !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(errors).map(
+      ([field, messages]) => [
+        field,
+        Array.isArray(messages)
+          ? messages
+          : [String(messages)],
+      ],
+    ),
+  );
+}
+
+function isNonNegativeInteger(value) {
+  if (
+    value === "" ||
+    value === null ||
+    value === undefined
+  ) {
+    return false;
+  }
+
+  const numberValue = Number(value);
+
+  return (
+    Number.isInteger(numberValue) &&
+    numberValue >= 0
+  );
+}
+
+function validateForm() {
+  const errors = {};
+
+  if (!form.title.trim()) {
+    errors.title = ["Title is required."];
+  }
+
+  if (!form.topic) {
+    errors.topic = ["Topic is required."];
+  }
+
+  if (!form.difficulty) {
+    errors.difficulty = [
+      "Difficulty is required.",
+    ];
+  }
+
+  if (!form.status) {
+    errors.status = ["Status is required."];
+  }
+
+  if (!isNonNegativeInteger(form.attempts)) {
+    errors.attempts = [
+      "Attempts must be a non-negative whole number.",
+    ];
+  }
+
+  if (
+    !isNonNegativeInteger(
+      form.time_spent_minutes,
+    )
+  ) {
+    errors.time_spent_minutes = [
+      "Time spent must be a non-negative whole number.",
+    ];
+  }
+
+  if (
+    form.status === "Solved" &&
+    !form.solved_date
+  ) {
+    errors.solved_date = [
+      "Solved date is required when status is Solved.",
+    ];
+  }
+
+  fieldErrors.value = errors;
+
+  if (Object.keys(errors).length > 0) {
+    errorMessage.value =
+      "Please correct the highlighted fields before saving.";
+
+    return false;
+  }
+
+  return true;
+}
+
+function buildPayload() {
+  return {
+    title: form.title.trim(),
+    platform: form.platform,
+    platform_link:
+      form.platform_link.trim() || null,
+    topic: form.topic,
+    difficulty: form.difficulty,
+    status: form.status,
+    attempts: Number(form.attempts),
+    time_spent_minutes: Number(
+      form.time_spent_minutes,
+    ),
+    revision_status: form.revision_status,
+    solved_date:
+      form.status === "Solved"
+        ? form.solved_date
+        : null,
+    notes: form.notes.trim() || null,
+  };
+}
+
 async function loadProblem() {
   if (!isEditing.value) {
     return;
@@ -94,6 +253,7 @@ async function loadProblem() {
 
   loadingProblem.value = true;
   errorMessage.value = "";
+  fieldErrors.value = {};
 
   try {
     const response = await api.get(
@@ -103,67 +263,56 @@ async function loadProblem() {
     const problem =
       response.data.data.problem;
 
-    Object.assign(
-      form,
-      {
-        title: problem.title || "",
-        platform: problem.platform || "LeetCode",
-        platform_link:
-          problem.platform_link || "",
-        topic: problem.topic || "Array",
-        difficulty:
-          problem.difficulty || "Easy",
-        status:
-          problem.status || "Unsolved",
-        attempts:
-          problem.attempts ?? 0,
-        time_spent_minutes:
-          problem.time_spent_minutes ?? 0,
-        revision_status:
-          problem.revision_status ||
-          "Not Started",
-        notes:
-          problem.notes || "",
-        solved_date:
-          problem.solved_date || "",
-      },
-    );
+    Object.assign(form, {
+      title: problem.title || "",
+      platform:
+        problem.platform || "LeetCode",
+      platform_link:
+        problem.platform_link || "",
+      topic:
+        problem.topic || "Array",
+      difficulty:
+        problem.difficulty || "Easy",
+      status:
+        problem.status || "Unsolved",
+      attempts:
+        problem.attempts ?? 0,
+      time_spent_minutes:
+        problem.time_spent_minutes ?? 0,
+      revision_status:
+        problem.revision_status ||
+        "Not Started",
+      solved_date:
+        problem.solved_date || "",
+      notes:
+        problem.notes || "",
+    });
   } catch (error) {
     errorMessage.value =
       error.response?.data?.message ||
       "The coding problem could not be loaded.";
+
+    fieldErrors.value = normalizeApiErrors(
+      error.response?.data?.errors,
+    );
   } finally {
     loadingProblem.value = false;
   }
 }
 
 async function submitProblem() {
-  loading.value = true;
   errorMessage.value = "";
   fieldErrors.value = {};
 
-  const payload = {
-    title: form.title.trim(),
-    platform: form.platform,
-    platform_link:
-      form.platform_link.trim() || null,
-    topic: form.topic,
-    difficulty: form.difficulty,
-    status: form.status,
-    attempts: Number(form.attempts),
-    time_spent_minutes:
-      Number(form.time_spent_minutes),
-    revision_status:
-      form.revision_status,
-    notes:
-      form.notes.trim() || null,
-    solved_date:
-      form.status === "Solved"
-        ? form.solved_date
-        : null,
-  };
+  if (!validateForm()) {
+    return;
+  }
+
+  saving.value = true;
 
   try {
+    const payload = buildPayload();
+
     if (isEditing.value) {
       await api.put(
         `/api/problems/${route.params.id}`,
@@ -178,24 +327,33 @@ async function submitProblem() {
 
     await router.push({
       name: "problems",
+      query: {
+        saved: isEditing.value
+          ? "updated"
+          : "created",
+      },
     });
   } catch (error) {
     errorMessage.value =
       error.response?.data?.message ||
       "The coding problem could not be saved.";
 
-    fieldErrors.value =
-      error.response?.data?.errors || {};
+    fieldErrors.value = normalizeApiErrors(
+      error.response?.data?.errors,
+    );
   } finally {
-    loading.value = false;
+    saving.value = false;
   }
 }
 
 watch(
   () => form.status,
   (status) => {
+    clearFieldError("status");
+
     if (status !== "Solved") {
       form.solved_date = "";
+      clearFieldError("solved_date");
     }
   },
 );
@@ -208,20 +366,18 @@ onMounted(loadProblem);
     <div class="page-header">
       <div>
         <span class="eyebrow">
-          {{ isEditing ? "Update record" : "New record" }}
-        </span>
-
-        <h1>
           {{
             isEditing
-              ? "Edit Coding Problem"
-              : "Add Coding Problem"
+              ? "Update record"
+              : "New record"
           }}
-        </h1>
+        </span>
+
+        <h1>{{ pageTitle }}</h1>
 
         <p>
-          Record problem details, attempts, time spent,
-          solving status and revision progress.
+          Add the problem source, classification, effort,
+          completion details, and revision notes.
         </p>
       </div>
 
@@ -236,8 +392,23 @@ onMounted(loadProblem);
     <div
       v-if="errorMessage"
       class="alert alert--error"
+      role="alert"
     >
       {{ errorMessage }}
+    </div>
+
+    <div
+      v-if="
+        firstError('body') ||
+        firstError('database')
+      "
+      class="alert alert--error"
+      role="alert"
+    >
+      {{
+        firstError("body") ||
+        firstError("database")
+      }}
     </div>
 
     <div
@@ -249,19 +420,24 @@ onMounted(loadProblem);
 
     <form
       v-else
-      class="panel form"
+      class="panel form problem-form"
+      novalidate
       @submit.prevent="submitProblem"
     >
       <div class="form-section">
         <div class="form-section__header">
           <h2>Problem Information</h2>
-          <p>Enter the source and classification details.</p>
+
+          <p>
+            Required fields are marked with an asterisk.
+          </p>
         </div>
 
         <div class="form-grid">
           <div class="form-group form-group--full">
             <label for="problem-title">
-              Problem Title
+              Title
+              <span class="required-mark">*</span>
             </label>
 
             <input
@@ -269,14 +445,21 @@ onMounted(loadProblem);
               v-model="form.title"
               type="text"
               placeholder="Example: Number of Islands"
+              autocomplete="off"
               required
+              :aria-invalid="hasError('title')"
+              :class="{
+                'form-control--error':
+                  hasError('title'),
+              }"
+              @input="clearFieldError('title')"
             />
 
             <small
-              v-if="fieldErrors.title"
+              v-if="hasError('title')"
               class="form-error"
             >
-              {{ fieldErrors.title[0] }}
+              {{ firstError("title") }}
             </small>
           </div>
 
@@ -288,6 +471,12 @@ onMounted(loadProblem);
             <select
               id="problem-platform"
               v-model="form.platform"
+              :aria-invalid="hasError('platform')"
+              :class="{
+                'form-control--error':
+                  hasError('platform'),
+              }"
+              @change="clearFieldError('platform')"
             >
               <option
                 v-for="platform in platforms"
@@ -297,17 +486,31 @@ onMounted(loadProblem);
                 {{ platform }}
               </option>
             </select>
+
+            <small
+              v-if="hasError('platform')"
+              class="form-error"
+            >
+              {{ firstError("platform") }}
+            </small>
           </div>
 
           <div class="form-group">
             <label for="problem-topic">
               Topic
+              <span class="required-mark">*</span>
             </label>
 
             <select
               id="problem-topic"
               v-model="form.topic"
               required
+              :aria-invalid="hasError('topic')"
+              :class="{
+                'form-control--error':
+                  hasError('topic'),
+              }"
+              @change="clearFieldError('topic')"
             >
               <option
                 v-for="topic in topics"
@@ -319,10 +522,10 @@ onMounted(loadProblem);
             </select>
 
             <small
-              v-if="fieldErrors.topic"
+              v-if="hasError('topic')"
               class="form-error"
             >
-              {{ fieldErrors.topic[0] }}
+              {{ firstError("topic") }}
             </small>
           </div>
 
@@ -336,21 +539,53 @@ onMounted(loadProblem);
               v-model="form.platform_link"
               type="url"
               placeholder="https://leetcode.com/problems/..."
+              :aria-invalid="
+                hasError('platform_link')
+              "
+              :class="{
+                'form-control--error':
+                  hasError('platform_link'),
+              }"
+              @input="
+                clearFieldError('platform_link')
+              "
             />
 
-            <small class="form-hint">
-              Optional direct link to the coding problem.
+            <small
+              v-if="hasError('platform_link')"
+              class="form-error"
+            >
+              {{ firstError("platform_link") }}
+            </small>
+
+            <small
+              v-else
+              class="form-hint"
+            >
+              Optional direct URL to the problem.
             </small>
           </div>
 
           <div class="form-group">
             <label for="problem-difficulty">
               Difficulty
+              <span class="required-mark">*</span>
             </label>
 
             <select
               id="problem-difficulty"
               v-model="form.difficulty"
+              required
+              :aria-invalid="
+                hasError('difficulty')
+              "
+              :class="{
+                'form-control--error':
+                  hasError('difficulty'),
+              }"
+              @change="
+                clearFieldError('difficulty')
+              "
             >
               <option
                 v-for="difficulty in difficulties"
@@ -360,16 +595,30 @@ onMounted(loadProblem);
                 {{ difficulty }}
               </option>
             </select>
+
+            <small
+              v-if="hasError('difficulty')"
+              class="form-error"
+            >
+              {{ firstError("difficulty") }}
+            </small>
           </div>
 
           <div class="form-group">
             <label for="problem-status">
-              Solving Status
+              Status
+              <span class="required-mark">*</span>
             </label>
 
             <select
               id="problem-status"
               v-model="form.status"
+              required
+              :aria-invalid="hasError('status')"
+              :class="{
+                'form-control--error':
+                  hasError('status'),
+              }"
             >
               <option
                 v-for="status in statuses"
@@ -379,20 +628,31 @@ onMounted(loadProblem);
                 {{ status }}
               </option>
             </select>
+
+            <small
+              v-if="hasError('status')"
+              class="form-error"
+            >
+              {{ firstError("status") }}
+            </small>
           </div>
         </div>
       </div>
 
       <div class="form-section">
         <div class="form-section__header">
-          <h2>Performance Details</h2>
-          <p>Record effort and completion information.</p>
+          <h2>Progress and Revision</h2>
+
+          <p>
+            Record attempts, time spent, completion, and
+            revision progress.
+          </p>
         </div>
 
         <div class="form-grid">
           <div class="form-group">
             <label for="attempts">
-              Number of Attempts
+              Attempts
             </label>
 
             <input
@@ -402,35 +662,81 @@ onMounted(loadProblem);
               min="0"
               step="1"
               required
+              :aria-invalid="
+                hasError('attempts')
+              "
+              :class="{
+                'form-control--error':
+                  hasError('attempts'),
+              }"
+              @input="
+                clearFieldError('attempts')
+              "
             />
 
             <small
-              v-if="fieldErrors.attempts"
+              v-if="hasError('attempts')"
               class="form-error"
             >
-              {{ fieldErrors.attempts[0] }}
+              {{ firstError("attempts") }}
+            </small>
+
+            <small
+              v-else
+              class="form-hint"
+            >
+              Defaults to 0.
             </small>
           </div>
 
           <div class="form-group">
             <label for="time-spent">
-              Time Spent in Minutes
+              Time Spent (minutes)
             </label>
 
             <input
               id="time-spent"
-              v-model.number="form.time_spent_minutes"
+              v-model.number="
+                form.time_spent_minutes
+              "
               type="number"
               min="0"
               step="1"
               required
+              :aria-invalid="
+                hasError('time_spent_minutes')
+              "
+              :class="{
+                'form-control--error':
+                  hasError(
+                    'time_spent_minutes',
+                  ),
+              }"
+              @input="
+                clearFieldError(
+                  'time_spent_minutes',
+                )
+              "
             />
 
             <small
-              v-if="fieldErrors.time_spent_minutes"
+              v-if="
+                hasError('time_spent_minutes')
+              "
               class="form-error"
             >
-              {{ fieldErrors.time_spent_minutes[0] }}
+              {{
+                firstError(
+                  "time_spent_minutes",
+                )
+              }}
+            </small>
+
+            <small
+              v-else
+              class="form-hint"
+            >
+              Defaults to 0.
             </small>
           </div>
 
@@ -442,42 +748,84 @@ onMounted(loadProblem);
             <select
               id="revision-status"
               v-model="form.revision_status"
+              :aria-invalid="
+                hasError('revision_status')
+              "
+              :class="{
+                'form-control--error':
+                  hasError('revision_status'),
+              }"
+              @change="
+                clearFieldError(
+                  'revision_status',
+                )
+              "
             >
               <option
-                v-for="status in revisionStatuses"
-                :key="status"
-                :value="status"
+                v-for="
+                  revisionStatus in
+                  revisionStatuses
+                "
+                :key="revisionStatus"
+                :value="revisionStatus"
               >
-                {{ status }}
+                {{ revisionStatus }}
               </option>
             </select>
+
+            <small
+              v-if="
+                hasError('revision_status')
+              "
+              class="form-error"
+            >
+              {{
+                firstError(
+                  "revision_status",
+                )
+              }}
+            </small>
           </div>
 
-          <div class="form-group">
+          <div
+            v-if="form.status === 'Solved'"
+            class="form-group"
+          >
             <label for="solved-date">
               Solved Date
+              <span class="required-mark">*</span>
             </label>
 
             <input
               id="solved-date"
               v-model="form.solved_date"
               type="date"
-              :required="form.status === 'Solved'"
-              :disabled="form.status !== 'Solved'"
+              required
+              :aria-invalid="
+                hasError('solved_date')
+              "
+              :class="{
+                'form-control--error':
+                  hasError('solved_date'),
+              }"
+              @input="
+                clearFieldError('solved_date')
+              "
             />
 
             <small
-              v-if="fieldErrors.solved_date"
+              v-if="hasError('solved_date')"
               class="form-error"
             >
-              {{ fieldErrors.solved_date[0] }}
+              {{ firstError("solved_date") }}
             </small>
 
             <small
               v-else
               class="form-hint"
             >
-              Required only when the problem is solved.
+              Required because the current status is
+              Solved.
             </small>
           </div>
 
@@ -490,13 +838,31 @@ onMounted(loadProblem);
               id="problem-notes"
               v-model="form.notes"
               rows="5"
-              placeholder="Approach used, mistakes, edge cases or revision notes..."
+              placeholder="Approach, mistakes, edge cases, or revision notes..."
+              :aria-invalid="hasError('notes')"
+              :class="{
+                'form-control--error':
+                  hasError('notes'),
+              }"
+              @input="clearFieldError('notes')"
             ></textarea>
+
+            <small
+              v-if="hasError('notes')"
+              class="form-error"
+            >
+              {{ firstError("notes") }}
+            </small>
           </div>
         </div>
       </div>
 
-      <div class="form-actions">
+      <div
+        class="
+          form-actions
+          problem-form__actions
+        "
+      >
         <RouterLink
           :to="{ name: 'problems' }"
           class="button button--secondary"
@@ -507,17 +873,39 @@ onMounted(loadProblem);
         <button
           type="submit"
           class="button button--primary"
-          :disabled="loading"
+          :disabled="saving"
         >
-          {{
-            loading
-              ? "Saving..."
-              : isEditing
-                ? "Update Problem"
-                : "Create Problem"
-          }}
+          {{ submitLabel }}
         </button>
       </div>
     </form>
   </section>
 </template>
+
+<style scoped>
+.required-mark {
+  color: var(--danger);
+}
+
+.form-control--error {
+  border-color: var(--danger) !important;
+
+  box-shadow:
+    0 0 0 3px
+    rgba(181, 45, 58, 0.1) !important;
+}
+
+.problem-form__actions {
+  padding-top: 2px;
+}
+
+@media (max-width: 760px) {
+  .problem-form__actions {
+    flex-direction: column-reverse;
+  }
+
+  .problem-form__actions .button {
+    width: 100%;
+  }
+}
+</style>
